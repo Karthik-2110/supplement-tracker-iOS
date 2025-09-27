@@ -134,10 +134,93 @@ class SupabaseManager: ObservableObject {
             .eq("id", value: id)
             .execute()
     }
+    
+    // MARK: - Consumption Tracking Operations
+    
+    /// Fetch today's consumption records
+    func fetchTodaysConsumptions() async throws -> [SupplementConsumption] {
+        let today = Date()
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: today)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? today
+        
+        let response: [ConsumptionDB] = try await client
+            .from("supplement_consumptions")
+            .select()
+            .gte("date", value: startOfDay.ISO8601Format())
+            .lt("date", value: endOfDay.ISO8601Format())
+            .execute()
+            .value
+        
+        return response.map { dbConsumption in
+            SupplementConsumption(
+                id: dbConsumption.id,
+                supplementId: dbConsumption.supplement_id,
+                date: ISO8601DateFormatter().date(from: dbConsumption.date) ?? Date(),
+                isConsumed: dbConsumption.is_consumed
+            )
+        }
+    }
+    
+    /// Save a new consumption record
+    func saveConsumption(_ consumption: SupplementConsumption) async throws {
+        let dbConsumption = ConsumptionDB(
+            id: consumption.id,
+            supplement_id: consumption.supplementId,
+            date: ISO8601DateFormatter().string(from: consumption.date),
+            is_consumed: consumption.isConsumed,
+            created_at: Date(),
+            updated_at: Date()
+        )
+        
+        try await client
+            .from("supplement_consumptions")
+            .insert(dbConsumption)
+            .execute()
+    }
+    
+    /// Update an existing consumption record
+    func updateConsumption(id: UUID, isConsumed: Bool) async throws {
+        struct UpdateData: Codable {
+            let is_consumed: Bool
+            let updated_at: String
+        }
+        
+        let updateData = UpdateData(
+            is_consumed: isConsumed,
+            updated_at: ISO8601DateFormatter().string(from: Date())
+        )
+        
+        try await client
+            .from("supplement_consumptions")
+            .update(updateData)
+            .eq("id", value: id)
+            .execute()
+    }
+    
+    /// Delete a consumption record
+    func deleteConsumption(id: UUID) async throws {
+        try await client
+            .from("supplement_consumptions")
+            .delete()
+            .eq("id", value: id)
+            .execute()
+    }
 }
 
 // MARK: - Database Model
-/// Database model that matches the// Database model for Supabase
+
+// Database model for supplement consumption
+struct ConsumptionDB: Codable {
+    let id: UUID
+    let supplement_id: UUID
+    let date: String // ISO8601 formatted date string
+    let is_consumed: Bool
+    let created_at: Date?
+    let updated_at: Date?
+}
+
+// Database model for supplements
 struct SupplementDB: Codable {
     let id: UUID
     let name: String
