@@ -1,42 +1,58 @@
-// In ContentView.swift
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        
-        // This check will fail for ALL users today,
-        // because iOS 26.0 does not exist yet.
-        if #available(iOS 26.0, *) {
-        
-            // NO ONE will see this TabView.
-            TabView {
-                            // MARK: - Home Tab
-                HomeView() // <-- Use the new view here
-                    .tabItem {
+        TabView {
+            // MARK: - Home Tab
+            HomeView()
+                .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }
 
-                SupplementsView()
-                    .tabItem { Label("Supplements", systemImage: "pills.fill") }
+            // MARK: - Supplements Tab
+            SupplementsView()
+                .tabItem { 
+                    Label("Supplements", systemImage: "pills.fill") 
+                }
 
-                // MARK: - Insights Tab
-                InsightsView() // <-- Use the new view here
-                    .tabItem {
+            // MARK: - Insights Tab
+            InsightsView()
+                .tabItem {
                     Label("Insights", systemImage: "chart.bar.xaxis")
                 }
 
-                // MARK: - Settings Tab
-                SettingsView() // <-- Use the new view here
+            // MARK: - Settings Tab
+            SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape.fill")
                 }
-            }
-            .tint(.blue)
+        }
+        .tint(.blue)
+        .onAppear {
+            // Customize tab bar appearance
+            let tabBarAppearance = UITabBarAppearance()
+            tabBarAppearance.configureWithOpaqueBackground()
+            tabBarAppearance.backgroundColor = UIColor.systemBackground
             
-        } else {
-            // EVERY user will see this message instead of your app.
-            Text("This app is not compatible with your device's iOS version.")
-                .padding()
+            // Increase spacing and adjust icon size
+            tabBarAppearance.stackedLayoutAppearance.normal.iconColor = UIColor.systemGray
+            tabBarAppearance.stackedLayoutAppearance.selected.iconColor = UIColor.systemBlue
+            tabBarAppearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+                .foregroundColor: UIColor.systemGray,
+                .font: UIFont.systemFont(ofSize: 10)
+            ]
+            tabBarAppearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+                .foregroundColor: UIColor.systemBlue,
+                .font: UIFont.systemFont(ofSize: 10, weight: .medium)
+            ]
+            
+            // Apply the appearance
+            UITabBar.appearance().standardAppearance = tabBarAppearance
+            UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+            
+            // Adjust item positioning for better spacing
+            UITabBar.appearance().itemSpacing = 10
+            UITabBar.appearance().itemPositioning = .centered
         }
     }
 }

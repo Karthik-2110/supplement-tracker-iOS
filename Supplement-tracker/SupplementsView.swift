@@ -585,21 +585,30 @@ struct SupplementRowView: View {
             }
             
             HStack {
-                Label(supplement.quantity, systemImage: "pills.fill")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "pills.fill")
+                    Text(supplement.quantity)
+                }
+                .font(.subheadline)
+                .foregroundColor(.secondary)
                 
                 Spacer()
                 
-                Label(scheduleText, systemImage: scheduleIcon)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: scheduleIcon)
+                    Text(scheduleText)
+                }
+                .font(.subheadline)
+                .foregroundColor(.secondary)
             }
             
             HStack {
-                Label(timeFormatter.string(from: supplement.time), systemImage: "clock")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                    Text(timeFormatter.string(from: supplement.time))
+                }
+                .font(.subheadline)
+                .foregroundColor(.secondary)
                 
                 Spacer()
                 
