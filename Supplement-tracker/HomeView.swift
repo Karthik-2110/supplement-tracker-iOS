@@ -226,6 +226,20 @@ struct HomeView: View {
         colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
     }
     
+    // Dynamic day name
+    private var currentDayName: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: Date())
+    }
+    
+    // Supplement progress counter
+    private var supplementProgress: String {
+        let totalSupplements = supplementConsumptions.count
+        let remainingSupplements = supplementConsumptions.filter { !$0.isConsumed }.count
+        return "\(remainingSupplements)/\(totalSupplements) supplements left for the day"
+    }
+    
     // Calculate dynamic day number
     private var dayNumber: Int {
         guard let startDate = supplementStartDate else { return 1 }
@@ -261,10 +275,7 @@ struct HomeView: View {
                         List {
                             // Supplement Consumptions Section
                             if !supplementConsumptions.isEmpty {
-                                Section(header: Text("Today's Supplements")
-                                    .font(.headline)
-                                    .foregroundColor(primaryTextColor)
-                                    .padding(.bottom, 4)) {
+                                Section {
                                     ForEach(supplementConsumptions) { item in
                                         SupplementConsumptionRowView(item: item, colorScheme: colorScheme)
                                             .listRowBackground(
@@ -317,18 +328,24 @@ struct HomeView: View {
                     }
                 }
             }
-            .navigationTitle("Day \(dayNumber)")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.large)
-            .preferredColorScheme(nil) // Allow system to control color scheme
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingAddItem = true
-                    }) {
-                        Image(systemName: "plus")
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 8) {
+                        Text(currentDayName)
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(primaryTextColor)
+                        if !supplementConsumptions.isEmpty {
+                            Text(supplementProgress)
+                                .font(.system(size: 14))
+                                .foregroundColor(secondaryTextColor)
+                        }
                     }
                 }
             }
+            .preferredColorScheme(nil) // Allow system to control color scheme
             .sheet(isPresented: $showingAddItem) {
                 // Add Item Sheet
                 NavigationStack {
