@@ -267,10 +267,10 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if homeItems.isEmpty && supplementConsumptions.isEmpty {
                         VStack(spacing: 16) {
-                            Image(systemName: "house")
-                                .font(.system(size: 50))
-                                .foregroundColor(secondaryTextColor)
-                            Text("Welcome to your home")
+                            ProgressView()
+                                .scaleEffect(1.2)
+                                .foregroundColor(primaryTextColor)
+                            Text("Loading supplements...")
                                 .font(.title2)
                                 .foregroundColor(secondaryTextColor)
                         }
@@ -432,7 +432,7 @@ struct HomeView: View {
             let supplementsWithConsumption = try await supabaseManager.fetchTodaysSupplementsWithConsumption()
             
             // Create supplement consumption items for all supplements
-            supplementConsumptions = supplementsWithConsumption.map { (supplement, consumption) in
+            let unsortedConsumptions = supplementsWithConsumption.map { (supplement, consumption) in
                 let timeFormatter = DateFormatter()
                 timeFormatter.dateFormat = "HH:mm"
                 let timeString = timeFormatter.string(from: supplement.time)
@@ -452,6 +452,19 @@ struct HomeView: View {
                     timeToTake: timeString,
                     supplementId: supplement.id
                 )
+            }
+            
+            // Sort supplements by time (earliest first)
+            supplementConsumptions = unsortedConsumptions.sorted { item1, item2 in
+                let formatter = DateFormatter()
+                formatter.dateFormat = "HH:mm"
+                
+                guard let time1 = formatter.date(from: item1.timeToTake),
+                      let time2 = formatter.date(from: item2.timeToTake) else {
+                    return false
+                }
+                
+                return time1 < time2
             }
         } catch {
             await MainActor.run {
