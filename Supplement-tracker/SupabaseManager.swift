@@ -1,6 +1,42 @@
 import Foundation
 import Supabase
 
+// MARK: - Data Models
+
+// Supplement consumption tracking model
+struct SupplementConsumption: Identifiable, Codable {
+    let id: UUID
+    var supplementId: UUID
+    var date: Date
+    var isConsumed: Bool
+    
+    init(id: UUID = UUID(), supplementId: UUID, date: Date, isConsumed: Bool = false) {
+        self.id = id
+        self.supplementId = supplementId
+        self.date = date
+        self.isConsumed = isConsumed
+    }
+}
+
+// Home item model for tracking various home activities
+struct HomeItem: Identifiable, Codable {
+    let id: UUID
+    var title: String
+    var subtitle: String
+    var category: String
+    var date: Date
+    var isCompleted: Bool
+    
+    init(id: UUID = UUID(), title: String, subtitle: String, category: String, date: Date = Date(), isCompleted: Bool = false) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.category = category
+        self.date = date
+        self.isCompleted = isCompleted
+    }
+}
+
 class SupabaseManager: ObservableObject {
     static let shared = SupabaseManager()
     
@@ -142,13 +178,16 @@ class SupabaseManager: ObservableObject {
         let today = Date()
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: today)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? today
+        
+        // Format date as YYYY-MM-DD for the date column
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayString = dateFormatter.string(from: today)
         
         let response: [ConsumptionDB] = try await client
-            .from("supplement_consumptions")
+            .from("supplement_consumption")
             .select()
-            .gte("date", value: startOfDay.ISO8601Format())
-            .lt("date", value: endOfDay.ISO8601Format())
+            .eq("date", value: todayString)
             .execute()
             .value
         
@@ -156,25 +195,40 @@ class SupabaseManager: ObservableObject {
             SupplementConsumption(
                 id: dbConsumption.id,
                 supplementId: dbConsumption.supplement_id,
-                date: ISO8601DateFormatter().date(from: dbConsumption.date) ?? Date(),
+                date: dateFormatter.date(from: dbConsumption.date) ?? Date(),
                 isConsumed: dbConsumption.is_consumed
             )
         }
     }
     
+    /// Fetch today's supplements with their consumption status
+    func fetchTodaysSupplementsWithConsumption() async throws -> [(supplement: Supplement, consumption: SupplementConsumption?)] {
+        let supplements = try await fetchSupplements()
+        let consumptions = try await fetchTodaysConsumptions()
+        
+        return supplements.map { supplement in
+            let consumption = consumptions.first { $0.supplementId == supplement.id }
+            return (supplement: supplement, consumption: consumption)
+        }
+    }
+    
     /// Save a new consumption record
     func saveConsumption(_ consumption: SupplementConsumption) async throws {
+        // Format date as YYYY-MM-DD for the date column
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        
         let dbConsumption = ConsumptionDB(
             id: consumption.id,
             supplement_id: consumption.supplementId,
-            date: ISO8601DateFormatter().string(from: consumption.date),
+            date: dateFormatter.string(from: consumption.date),
             is_consumed: consumption.isConsumed,
             created_at: Date(),
             updated_at: Date()
         )
         
         try await client
-            .from("supplement_consumptions")
+            .from("supplement_consumption")
             .insert(dbConsumption)
             .execute()
     }
@@ -192,7 +246,7 @@ class SupabaseManager: ObservableObject {
         )
         
         try await client
-            .from("supplement_consumptions")
+            .from("supplement_consumption")
             .update(updateData)
             .eq("id", value: id)
             .execute()
@@ -201,7 +255,106 @@ class SupabaseManager: ObservableObject {
     /// Delete a consumption record
     func deleteConsumption(id: UUID) async throws {
         try await client
-            .from("supplement_consumptions")
+            .from("supplement_consumption")
+            .delete()
+            .eq("id", value: id)
+            .execute()
+    }
+    
+    /// Create or update today's consumption record for a supplement
+    func createOrUpdateTodaysConsumption(supplementId: UUID, isConsumed: Bool) async throws {
+        let today = Date()
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayString = dateFormatter.string(from: today)
+        
+        // Check if consumption record exists for today
+        let existingConsumptions: [ConsumptionDB] = try await client
+            .from("supplement_consumption")
+            .select()
+            .eq("supplement_id", value: supplementId)
+            .eq("date", value: todayString)
+            .execute()
+            .value
+        
+        if let existingConsumption = existingConsumptions.first {
+            // Update existing record
+            try await updateConsumption(id: existingConsumption.id, isConsumed: isConsumed)
+        } else {
+            // Create new record
+            let newConsumption = SupplementConsumption(
+                supplementId: supplementId,
+                date: today,
+                isConsumed: isConsumed
+            )
+            try await saveConsumption(newConsumption)
+        }
+    }
+    
+    // MARK: - Home Items CRUD Operations
+
+    /// Fetch all home items from the database
+    func fetchHomeItems() async throws -> [HomeItem] {
+        let response: [HomeItemDB] = try await client
+            .from("home_items")
+            .select()
+            .execute()
+            .value
+        
+        return response.map { dbItem in
+            HomeItem(
+                id: dbItem.id,
+                title: dbItem.title,
+                subtitle: dbItem.subtitle,
+                category: dbItem.category,
+                date: ISO8601DateFormatter().date(from: dbItem.date) ?? Date(),
+                isCompleted: dbItem.is_completed
+            )
+        }
+    }
+
+    /// Add a new home item to the database
+    func addHomeItem(_ item: HomeItem) async throws {
+        let dbItem = HomeItemDB(
+            id: item.id,
+            title: item.title,
+            subtitle: item.subtitle,
+            category: item.category,
+            date: ISO8601DateFormatter().string(from: item.date),
+            is_completed: item.isCompleted,
+            created_at: nil,
+            updated_at: nil
+        )
+        
+        try await client
+            .from("home_items")
+            .insert(dbItem)
+            .execute()
+    }
+
+    /// Update a home item's completion status
+    func updateHomeItemCompletion(id: UUID, isCompleted: Bool) async throws {
+        struct UpdateData: Codable {
+            let is_completed: Bool
+            let updated_at: String
+        }
+        
+        let updateData = UpdateData(
+            is_completed: isCompleted,
+            updated_at: ISO8601DateFormatter().string(from: Date())
+        )
+        
+        try await client
+            .from("home_items")
+            .update(updateData)
+            .eq("id", value: id)
+            .execute()
+    }
+
+    /// Delete a home item
+    func deleteHomeItem(id: UUID) async throws {
+        try await client
+            .from("home_items")
             .delete()
             .eq("id", value: id)
             .execute()
@@ -209,6 +362,18 @@ class SupabaseManager: ObservableObject {
 }
 
 // MARK: - Database Model
+
+// Database model for home items
+struct HomeItemDB: Codable {
+    let id: UUID
+    let title: String
+    let subtitle: String
+    let category: String
+    let date: String // ISO8601 formatted date string
+    let is_completed: Bool
+    let created_at: Date?
+    let updated_at: Date?
+}
 
 // Database model for supplement consumption
 struct ConsumptionDB: Codable {

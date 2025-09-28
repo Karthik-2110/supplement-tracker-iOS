@@ -1,419 +1,484 @@
-//
-//  HomeView.swift
-//  Supplement-tracker
-//
-//  Created by Karthik on 26/09/25.
-//
-
 import SwiftUI
 
-// Model for tracking supplement consumption (Your existing model - unchanged)
-struct SupplementConsumption: Identifiable, Codable {
+// Supplement consumption item for home display
+struct SupplementConsumptionItem: Identifiable {
     let id: UUID
     let supplementId: UUID
+    let supplementName: String
+    let quantity: String
+    let brand: String
+    let timeToTake: String
+    let isConsumed: Bool
     let date: Date
-    var isConsumed: Bool
     
-    init(id: UUID = UUID(), supplementId: UUID, date: Date, isConsumed: Bool = false) {
-        self.id = id
+    init(consumption: SupplementConsumption, supplementName: String, quantity: String, brand: String, timeToTake: String, supplementId: UUID) {
+        self.id = consumption.id
         self.supplementId = supplementId
-        self.date = date
-        self.isConsumed = isConsumed
+        self.supplementName = supplementName
+        self.quantity = quantity
+        self.brand = brand
+        self.timeToTake = timeToTake
+        self.isConsumed = consumption.isConsumed
+        self.date = consumption.date
     }
 }
 
-// Model for today's supplement schedule (Your existing model - unchanged)
-struct TodaysSupplementItem: Identifiable {
-    let id = UUID()
-    let supplement: Supplement
-    let scheduledTime: Date
-    var isConsumed: Bool
-    let consumptionId: UUID?
+// Supplement consumption row view
+struct SupplementConsumptionRowView: View {
+    let item: SupplementConsumptionItem
+    let colorScheme: ColorScheme
     
-    // Computed property for formatted time display
-    var timeToTake: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return formatter.string(from: scheduledTime)
+    // Dynamic colors based on color scheme
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? Color.white : Color(red: 51/255, green: 51/255, blue: 51/255)
     }
     
-    static func == (lhs: TodaysSupplementItem, rhs: TodaysSupplementItem) -> Bool {
-        return lhs.id == rhs.id
+    private var secondaryTextColor: Color {
+        colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
     }
     
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
+    private var backgroundAccentColor: Color {
+        colorScheme == .dark ? Color(.systemGray5) : Color.gray.opacity(0.2)
     }
-}
+    
+    private var completedTextColor: Color {
+        colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
+    }
 
-// Updated Time period enum - removed Night period to match Figma design
-enum TimePeriod: String, CaseIterable {
-    case morning = "Morning"
-    case afternoon = "Afternoon"
-    case evening = "Evening"
-    
-    var timeRange: ClosedRange<Int> {
-        switch self {
-        case .morning: return 5...11
-        case .afternoon: return 12...16
-        case .evening: return 17...23
-        }
-    }
-}
-
-struct HomeView: View {
-    // Mock data for preview and demonstration purposes
-    @State private var todaysSupplements: [TodaysSupplementItem] = [
-        // Morning supplements
-        TodaysSupplementItem(supplement: Supplement(name: "Vitamin D3", quantity: "1000 IU", timesPerDay: 1, time: Date(), brand: "Nature Made"), scheduledTime: Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date(), isConsumed: true, consumptionId: UUID()),
-        TodaysSupplementItem(supplement: Supplement(name: "Omega-3", quantity: "1 capsule", timesPerDay: 1, time: Date(), brand: "Nordic Naturals"), scheduledTime: Calendar.current.date(bySettingHour: 8, minute: 30, second: 0, of: Date()) ?? Date(), isConsumed: false, consumptionId: nil),
-        TodaysSupplementItem(supplement: Supplement(name: "Multivitamin", quantity: "1 tablet", timesPerDay: 1, time: Date(), brand: "Centrum"), scheduledTime: Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date(), isConsumed: false, consumptionId: nil),
-        
-        // Afternoon supplements
-        TodaysSupplementItem(supplement: Supplement(name: "Protein Powder", quantity: "1 scoop", timesPerDay: 1, time: Date(), brand: "Optimum Nutrition"), scheduledTime: Calendar.current.date(bySettingHour: 14, minute: 0, second: 0, of: Date()) ?? Date(), isConsumed: false, consumptionId: nil),
-        TodaysSupplementItem(supplement: Supplement(name: "Creatine", quantity: "5g", timesPerDay: 1, time: Date(), brand: "Creapure"), scheduledTime: Calendar.current.date(bySettingHour: 15, minute: 0, second: 0, of: Date()) ?? Date(), isConsumed: false, consumptionId: nil),
-        
-        // Evening supplements
-        TodaysSupplementItem(supplement: Supplement(name: "Magnesium", quantity: "400mg", timesPerDay: 1, time: Date(), brand: "Nature's Bounty"), scheduledTime: Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: Date()) ?? Date(), isConsumed: false, consumptionId: nil),
-        TodaysSupplementItem(supplement: Supplement(name: "Melatonin", quantity: "3mg", timesPerDay: 1, time: Date(), brand: "Natrol"), scheduledTime: Calendar.current.date(bySettingHour: 21, minute: 30, second: 0, of: Date()) ?? Date(), isConsumed: false, consumptionId: nil),
-    ]
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-    
-    // MARK: - Formatters
+    // 12-hour time formatter
     private var timeFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
         return formatter
     }
     
-    private var dayFormatter: DateFormatter {
+    // Convert 24-hour time string to 12-hour format
+    private func formatTime(_ timeString: String) -> String {
+        let inputFormatter = DateFormatter()
+        inputFormatter.dateFormat = "HH:mm"
+        
+        if let date = inputFormatter.date(from: timeString) {
+            return timeFormatter.string(from: date)
+        }
+        return timeString
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // First row: Name and Time
+            HStack {
+                Text(item.supplementName)
+                    .font(.headline)
+                    .foregroundColor(item.isConsumed ? completedTextColor : primaryTextColor)
+                    .strikethrough(item.isConsumed)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.caption)
+                        .foregroundColor(secondaryTextColor)
+                    Text(formatTime(item.timeToTake))
+                        .font(.caption)
+                        .foregroundColor(secondaryTextColor)
+                }
+            }
+            
+            // Second row: Quantity and Status
+            HStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "pills.fill")
+                    Text(item.quantity)
+                }
+                .font(.subheadline)
+                .foregroundColor(item.isConsumed ? completedTextColor : secondaryTextColor)
+                
+                Spacer()
+                
+                Text(item.isConsumed ? "Taken" : "Pending")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(item.isConsumed ? .green : .orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill((item.isConsumed ? Color.green : Color.orange).opacity(0.15))
+                    )
+            }
+        }
+        .padding(.vertical, 4)
+        .opacity(item.isConsumed ? 0.6 : 1.0)
+    }
+}
+
+// Individual home item row view
+struct HomeItemRowView: View {
+    let item: HomeItem
+    let colorScheme: ColorScheme
+    
+    // Dynamic colors based on color scheme
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? Color.white : Color(red: 51/255, green: 51/255, blue: 51/255)
+    }
+    
+    private var secondaryTextColor: Color {
+        colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
+    }
+    
+    private var backgroundAccentColor: Color {
+        colorScheme == .dark ? Color(.systemGray5) : Color.gray.opacity(0.2)
+    }
+    
+    private var completedTextColor: Color {
+        colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
+    }
+
+    private var timeFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE"
+        formatter.timeStyle = .short
         return formatter
     }
-    
-    // MARK: - Computed Properties for UI
-    private var dynamicTitle: String {
-        let now = Date()
-        let dayString = dayFormatter.string(from: now)
-        let hour = Calendar.current.component(.hour, from: now)
-        
-        let timeOfDay: String
-        switch hour {
-        case 5..<12: timeOfDay = "morning"
-        case 12..<17: timeOfDay = "afternoon"
-        case 17..<24: timeOfDay = "evening"
-        default: timeOfDay = "morning"
-        }
-        
-        return "\(dayString) \(timeOfDay)"
-    }
-    
-    private var supplementCountText: String {
-        let remainingCount = todaysSupplements.filter { !$0.isConsumed }.count
-        return "\(remainingCount) Supplement\(remainingCount == 1 ? "" : "s") left"
-    }
-    
-    // MARK: - Helper Methods
-    private func supplementsForPeriod(_ period: TimePeriod) -> [TodaysSupplementItem] {
-        return todaysSupplements.filter { item in
-            let hour = Calendar.current.component(.hour, from: item.scheduledTime)
-            return period.timeRange.contains(hour)
-        }
-    }
-    
+
     var body: some View {
-        NavigationView {
-            ZStack(alignment: .top) {
-                // Background color matching new Figma design
-                Color(red: 243/255, green: 243/255, blue: 248/255) // #f3f3f8
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(item.title)
+                    .font(.headline)
+                    .foregroundColor(item.isCompleted ? completedTextColor : primaryTextColor)
+                    .strikethrough(item.isCompleted)
+                Spacer()
+                Text(item.category)
+                    .font(.caption)
+                    .foregroundColor(secondaryTextColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(backgroundAccentColor)
+                    .cornerRadius(4)
+            }
+            
+            HStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "house.fill")
+                    Text(item.subtitle)
+                }
+                .font(.subheadline)
+                .foregroundColor(item.isCompleted ? completedTextColor : secondaryTextColor)
+                
+                Spacer()
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                    Text("Today")
+                }
+                .font(.subheadline)
+                .foregroundColor(item.isCompleted ? completedTextColor : secondaryTextColor)
+            }
+            
+            HStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                    Text(timeFormatter.string(from: item.date))
+                }
+                .font(.subheadline)
+                .foregroundColor(item.isCompleted ? completedTextColor : secondaryTextColor)
+                
+                Spacer()
+                
+                // Status badge
+                Text(item.isCompleted ? "Completed" : "Active")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(item.isCompleted ? .green : .blue)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill((item.isCompleted ? Color.green : Color.blue).opacity(0.1))
+                    )
+            }
+        }
+        .padding(.vertical, 4)
+        .opacity(item.isCompleted ? 0.6 : 1.0)
+    }
+}
+
+struct HomeView: View {
+    @Environment(\.colorScheme) var colorScheme
+    @State private var homeItems: [HomeItem] = []
+    @State private var supplementConsumptions: [SupplementConsumptionItem] = []
+    @State private var showingAddItem = false
+    @State private var editingItem: HomeItem?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var supplementStartDate: Date?
+
+    private let supabaseManager = SupabaseManager.shared
+    
+    // Dynamic colors based on color scheme
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color(red: 243/255, green: 243/255, blue: 248/255)
+    }
+    
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? Color.white : Color(red: 51/255, green: 51/255, blue: 51/255)
+    }
+    
+    private var secondaryTextColor: Color {
+        colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
+    }
+    
+    // Calculate dynamic day number
+    private var dayNumber: Int {
+        guard let startDate = supplementStartDate else { return 1 }
+        let calendar = Calendar.current
+        let today = Date()
+        let daysSinceStart = calendar.dateComponents([.day], from: startDate, to: today).day ?? 0
+        return max(1, daysSinceStart + 1)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                // Background
+                backgroundColor
                     .ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Header section with new design
-                        headerView
-                        
-                        if isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.top, 50)
-                        } else if todaysSupplements.isEmpty {
-                            emptyStateView
-                        } else {
-                            // Content sections
-                            VStack(spacing: 16) {
-                                ForEach(TimePeriod.allCases, id: \.self) { period in
-                                    let supplements = supplementsForPeriod(period)
-                                    if !supplements.isEmpty {
-                                        SupplementSectionView(
-                                            period: period.rawValue,
-                                            supplements: supplements,
-                                            onToggle: { item in
-                                                toggleConsumption(for: item)
+                Group {
+                    if isLoading {
+                        ProgressView("Loading home...")
+                            .foregroundColor(primaryTextColor)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if homeItems.isEmpty && supplementConsumptions.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "house")
+                                .font(.system(size: 50))
+                                .foregroundColor(secondaryTextColor)
+                            Text("Welcome to your home")
+                                .font(.title2)
+                                .foregroundColor(secondaryTextColor)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        List {
+                            // Supplement Consumptions Section
+                            if !supplementConsumptions.isEmpty {
+                                Section(header: Text("Today's Supplements")
+                                    .font(.headline)
+                                    .foregroundColor(primaryTextColor)
+                                    .padding(.bottom, 4)) {
+                                    ForEach(supplementConsumptions) { item in
+                                        SupplementConsumptionRowView(item: item, colorScheme: colorScheme)
+                                            .listRowBackground(
+                                                colorScheme == .dark ? Color(.systemGray6) : Color.white
+                                            )
+                                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                                Button(item.isConsumed ? "Mark Pending" : "Mark Taken") {
+                                                    Task {
+                                                        await toggleSupplementConsumption(item)
+                                                    }
+                                                }
+                                                .tint(item.isConsumed ? .orange : .green)
                                             }
-                                        )
+                                    }
+                                }
+                            }
+                            
+                            // Home Items Section
+                            if !homeItems.isEmpty {
+                                Section(header: Text("Home Activities")
+                                    .font(.headline)
+                                    .foregroundColor(primaryTextColor)
+                                    .padding(.bottom, 4)) {
+                                    ForEach(homeItems) { item in
+                                        HomeItemRowView(item: item, colorScheme: colorScheme)
+                                            .listRowBackground(
+                                                colorScheme == .dark ? Color(.systemGray6) : Color.white
+                                            )
+                                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                                Button("Delete") {
+                                                    Task {
+                                                        await deleteItem(item)
+                                                    }
+                                                }
+                                                .tint(.red)
+                                                
+                                                Button(item.isCompleted ? "Undo" : "Mark as Done") {
+                                                    Task {
+                                                        await toggleItemCompletion(item)
+                                                    }
+                                                }
+                                                .tint(item.isCompleted ? .orange : .green)
+                                            }
                                     }
                                 }
                             }
                         }
+                        .scrollContentBackground(.hidden)
+                        .background(backgroundColor)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 34)
-                    .padding(.bottom, 100) // Space for floating button
                 }
-                
-                // Floating action button
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        floatingActionButton
+            }
+            .navigationTitle("Day \(dayNumber)")
+            .navigationBarTitleDisplayMode(.large)
+            .preferredColorScheme(nil) // Allow system to control color scheme
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingAddItem = true
+                    }) {
+                        Image(systemName: "plus")
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 34)
                 }
             }
-        }
-        .navigationBarHidden(true)
-        .task {
-            // Load supplements data when view appears
-            await loadTodaysSupplements()
-        }
-        .refreshable {
-            // Pull-to-refresh functionality
-            await loadTodaysSupplements()
-        }
-        .alert("Error", isPresented: .constant(errorMessage != nil)) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            if let msg = errorMessage { Text(msg) }
-        }
-    }
-    
-    // MARK: - Header View (Updated to match new Figma design)
-    private var headerView: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Main title
-            Text(dynamicTitle)
-                .font(.system(size: 34, weight: .bold))
-                .foregroundColor(Color(red: 51/255, green: 51/255, blue: 51/255)) // #333333
-                .tracking(0.4)
-            
-            // Subtitle
-            Text(supplementCountText)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(Color(red: 153/255, green: 153/255, blue: 153/255)) // #999999
-                .tracking(-0.25)
-        }
-    }
-    
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Spacer(minLength: 100)
-            Image(systemName: "pills.circle")
-                .font(.system(size: 60))
-                .foregroundColor(.gray.opacity(0.5))
-            Text("No supplements for today")
-                .font(.title2)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-            Text("Add a new supplement to get started.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-    }
-    
-    private var floatingActionButton: some View {
-        Button(action: {
-            // Action for adding new supplement
-        }) {
-            Image(systemName: "plus")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 56, height: 56)
-                .background(Color.blue)
-                .clipShape(Circle())
-                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-        }
-    }
-    
-    // MARK: - Business Logic
-    
-    /// Loads today's supplements from the database or local storage
-    private func loadTodaysSupplements() async {
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            // Simulate API call delay
-            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-            
-            // In a real app, this would fetch from Supabase or Core Data
-            // For now, we'll use the mock data but simulate loading
-            await MainActor.run {
-                // The mock data is already set, so we just stop loading
-                isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                errorMessage = "Failed to load supplements: \(error.localizedDescription)"
-                isLoading = false
-            }
-        }
-    }
-    
-    /// Toggles the consumption status of a supplement
-    private func toggleConsumption(for item: TodaysSupplementItem) {
-        // Find the item in the array and toggle its consumption status
-        if let index = todaysSupplements.firstIndex(where: { $0.id == item.id }) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                todaysSupplements[index].isConsumed.toggle()
-            }
-            
-            // Persist the change
-            Task {
-                await persistConsumptionChange(for: todaysSupplements[index])
-            }
-        }
-    }
-    
-    /// Persists consumption changes to the database
-    private func persistConsumptionChange(for item: TodaysSupplementItem) async {
-        do {
-            // In a real app, this would update Supabase or Core Data
-            // For now, we'll simulate the API call
-            try await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
-            
-            // Log the change for debugging
-            print("Persisted consumption change for \(item.supplement.name): \(item.isConsumed)")
-            
-        } catch {
-            await MainActor.run {
-                errorMessage = "Failed to save changes: \(error.localizedDescription)"
-                
-                // Revert the change on error
-                if let index = todaysSupplements.firstIndex(where: { $0.id == item.id }) {
-                    todaysSupplements[index].isConsumed.toggle()
-                }
-            }
-        }
-    }
-    
-    /// Refreshes the supplement data
-    private func refreshData() {
-        Task {
-            await loadTodaysSupplements()
-        }
-    }
-}
-
-// MARK: - Section View (Updated design)
-struct SupplementSectionView: View {
-    let period: String
-    let supplements: [TodaysSupplementItem]
-    let onToggle: (TodaysSupplementItem) -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Section header with padding
-            HStack {
-                Text(period)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(red: 140/255, green: 140/255, blue: 140/255)) // #8c8c8c
-                    .tracking(-0.08)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            
-            // Supplement cards
-            VStack(spacing: 0) {
-                ForEach(Array(supplements.enumerated()), id: \.element.id) { index, item in
-                    TodaysSupplementRowView(item: item, onToggle: { onToggle(item) })
-                    
-                    // Divider between items (not after last item)
-                    if index < supplements.count - 1 {
-                        HStack {
-                            Spacer()
-                            Rectangle()
-                                .fill(Color(red: 217/255, green: 217/255, blue: 217/255)) // #d9d9d9
-                                .frame(height: 1)
-                                .frame(width: 319)
-                            Spacer()
+            .sheet(isPresented: $showingAddItem) {
+                // Add Item Sheet
+                NavigationStack {
+                    VStack {
+                        Text("Add Home Item")
+                            .font(.title)
+                            .foregroundColor(primaryTextColor)
+                        Text("Feature coming soon...")
+                            .foregroundColor(secondaryTextColor)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(backgroundColor)
+                    .navigationTitle("Add Item")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Cancel") {
+                                showingAddItem = false
+                            }
                         }
                     }
                 }
             }
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 26))
+            .sheet(item: $editingItem) { item in
+                // Edit Item Sheet
+                NavigationStack {
+                    VStack {
+                        Text("Edit Home Item")
+                            .font(.title)
+                            .foregroundColor(primaryTextColor)
+                        Text("Feature coming soon...")
+                            .foregroundColor(secondaryTextColor)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(backgroundColor)
+                    .navigationTitle("Edit Item")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Cancel") {
+                                editingItem = nil
+                            }
+                        }
+                    }
+                }
+            }
+            .task {
+                await loadHomeItems()
+                await loadSupplementConsumptions()
+                await loadSupplementStartDate()
+            }
+            .refreshable {
+                await loadHomeItems()
+                await loadSupplementConsumptions()
+                await loadSupplementStartDate()
+            }
+        }
+        .alert("Error", isPresented: .constant(errorMessage != nil)) {
+            Button("OK") {
+                errorMessage = nil
+            }
+        } message: {
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
+            }
         }
     }
-}
-
-// MARK: - Row View (Updated design)
-struct TodaysSupplementRowView: View {
-    let item: TodaysSupplementItem
-    let onToggle: () -> Void
     
-    var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 16) {
-                // Custom checkbox
-                ZStack {
-                    Circle()
-                        .stroke(
-                            item.isConsumed 
-                                ? Color(red: 0/255, green: 122/255, blue: 255/255) // #007aff
-                                : Color(red: 217/255, green: 217/255, blue: 217/255), // #d9d9d9
-                            lineWidth: 2
-                        )
-                        .fill(
-                            item.isConsumed 
-                                ? Color(red: 0/255, green: 122/255, blue: 255/255) // #007aff
-                                : Color.clear
-                        )
-                        .frame(width: 22, height: 22)
-                    
-                    if item.isConsumed {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                }
-                
-                // Supplement info
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(item.supplement.name)
-                            .font(.system(size: 17, weight: .regular))
-                            .foregroundColor(Color(red: 51/255, green: 51/255, blue: 51/255)) // #333333
-                            .tracking(-0.41)
-                            .strikethrough(item.isConsumed)
-                        
-                        Spacer()
-                        
-                        Text(item.supplement.quantity)
-                            .font(.system(size: 17, weight: .regular))
-                            .foregroundColor(Color(red: 153/255, green: 153/255, blue: 153/255)) // #999999
-                            .tracking(-0.41)
-                    }
-                    
-                    Text(item.timeToTake)
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundColor(Color(red: 153/255, green: 153/255, blue: 153/255)) // #999999
-                        .tracking(-0.24)
-                }
-                
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+    private func loadHomeItems() async {
+        // Placeholder for home items loading
+        // This would typically fetch from a database or API
+        await MainActor.run {
+            homeItems = []
         }
-        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func loadSupplementConsumptions() async {
+        do {
+            // Fetch today's supplements with their consumption status
+            let supplementsWithConsumption = try await supabaseManager.fetchTodaysSupplementsWithConsumption()
+            
+            // Create supplement consumption items for all supplements
+            supplementConsumptions = supplementsWithConsumption.map { (supplement, consumption) in
+                let timeFormatter = DateFormatter()
+                timeFormatter.dateFormat = "HH:mm"
+                let timeString = timeFormatter.string(from: supplement.time)
+                
+                // If no consumption record exists, create a default one
+                let effectiveConsumption = consumption ?? SupplementConsumption(
+                    supplementId: supplement.id,
+                    date: Date(),
+                    isConsumed: false
+                )
+                
+                return SupplementConsumptionItem(
+                    consumption: effectiveConsumption,
+                    supplementName: supplement.name,
+                    quantity: supplement.quantity,
+                    brand: supplement.brand,
+                    timeToTake: timeString,
+                    supplementId: supplement.id
+                )
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to load supplement consumptions: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    private func loadSupplementStartDate() async {
+        do {
+            // Fetch all supplements to find the earliest created date
+            let supplements = try await supabaseManager.fetchSupplements()
+            
+            // For now, we'll use today's date as the start date
+            // In a real app, you'd want to store the user's start date in the database
+            await MainActor.run {
+                supplementStartDate = Calendar.current.startOfDay(for: Date())
+            }
+        } catch {
+            await MainActor.run {
+                supplementStartDate = Calendar.current.startOfDay(for: Date())
+            }
+        }
+    }
+    
+    private func toggleItemCompletion(_ item: HomeItem) async {
+        // Placeholder for toggling item completion
+        // This would typically update the item in a database or API
+    }
+    
+    private func toggleSupplementConsumption(_ item: SupplementConsumptionItem) async {
+        do {
+            // Use the new method to create or update consumption record
+            try await supabaseManager.createOrUpdateTodaysConsumption(
+                supplementId: item.supplementId,
+                isConsumed: !item.isConsumed
+            )
+            await loadSupplementConsumptions() // Refresh the list
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to update supplement consumption: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    private func deleteItem(_ item: HomeItem) async {
+        // Placeholder for deleting item
+        // This would typically delete the item from a database or API
     }
 }
 

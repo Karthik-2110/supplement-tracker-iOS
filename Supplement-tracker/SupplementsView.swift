@@ -69,6 +69,20 @@ struct Supplement: Identifiable, Codable {
 struct IntervalSelectionView: View {
     @Binding var interval: SupplementInterval
     @Binding var weeklySchedule: WeeklySchedule
+    let colorScheme: ColorScheme
+    
+    // Dynamic colors based on color scheme
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? Color.white : Color(red: 51/255, green: 51/255, blue: 51/255)
+    }
+    
+    private var secondaryTextColor: Color {
+        colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
+    }
+    
+    private var backgroundAccentColor: Color {
+        colorScheme == .dark ? Color.blue.opacity(0.2) : Color.blue.opacity(0.1)
+    }
     
     private let weekdays = [
         ("Su", "Sunday", \WeeklySchedule.sunday),
@@ -101,9 +115,10 @@ struct IntervalSelectionView: View {
                         Text("Daily Reminder")
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .foregroundColor(primaryTextColor)
                         Text("This confirms that this supplement is taken by you on daily basis.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(secondaryTextColor)
                             .multilineTextAlignment(.leading)
                     }
                     
@@ -111,16 +126,16 @@ struct IntervalSelectionView: View {
                 }
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
-                .background(Color.blue.opacity(0.1))
+                .background(backgroundAccentColor)
                 .cornerRadius(8)
             }
             
-            // Weekly Schedule Selection (only shown when weekly is selected)
+            // Weekly day selection
             if interval == .weekly {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Select Days")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(secondaryTextColor)
                     
                     HStack(spacing: 12) {
                         ForEach(weekdays, id: \.0) { day in
@@ -130,7 +145,8 @@ struct IntervalSelectionView: View {
                                 isSelected: weeklySchedule[keyPath: day.2],
                                 onTap: {
                                     weeklySchedule[keyPath: day.2].toggle()
-                                }
+                                },
+                                colorScheme: colorScheme
                             )
                         }
                     }
@@ -148,16 +164,34 @@ struct WeekdayCircle: View {
     let fullName: String
     let isSelected: Bool
     let onTap: () -> Void
+    let colorScheme: ColorScheme
     
+    // Dynamic colors based on color scheme
+    private var textColor: Color {
+        if isSelected {
+            return .white
+        } else {
+            return colorScheme == .dark ? Color.white : Color(red: 51/255, green: 51/255, blue: 51/255)
+        }
+    }
+    
+    private var backgroundColor: Color {
+        if isSelected {
+            return Color.blue
+        } else {
+            return colorScheme == .dark ? Color(.systemGray5) : Color.gray.opacity(0.2)
+        }
+    }
+
     var body: some View {
         Button(action: onTap) {
             Text(abbreviation)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isSelected ? .white : .primary)
+                .foregroundColor(textColor)
                 .frame(width: 36, height: 36)
                 .background(
                     Circle()
-                        .fill(isSelected ? Color.blue : Color.gray.opacity(0.2))
+                        .fill(backgroundColor)
                 )
         }
         .buttonStyle(PlainButtonStyle())
@@ -169,8 +203,9 @@ struct WeekdayCircle: View {
 // Add Supplement View for input form
 struct AddSupplementView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
     @StateObject private var supabaseManager = SupabaseManager.shared
-    
+
     @State private var name = ""
     @State private var quantity = ""
     @State private var timesPerDay = 1
@@ -181,9 +216,9 @@ struct AddSupplementView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var retryAttempt = 0
-    
+
     let onSupplementAdded: () -> Void
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -199,7 +234,7 @@ struct AddSupplementView: View {
                 }
                 
                 Section("Reminder Schedule") {
-                    IntervalSelectionView(interval: $interval, weeklySchedule: $weeklySchedule)
+                    IntervalSelectionView(interval: $interval, weeklySchedule: $weeklySchedule, colorScheme: colorScheme)
                 }
                 
                 if let errorMessage = errorMessage {
@@ -289,10 +324,11 @@ struct AddSupplementView: View {
 // Edit Supplement View for modifying existing supplements
 struct EditSupplementView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
     @StateObject private var supabaseManager = SupabaseManager.shared
     let supplement: Supplement
     let onSupplementUpdated: () -> Void
-    
+
     @State private var name: String
     @State private var quantity: String
     @State private var timesPerDay: Int
@@ -303,7 +339,7 @@ struct EditSupplementView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var retryAttempt = 0
-    
+
     init(supplement: Supplement, onSupplementUpdated: @escaping () -> Void) {
         self.supplement = supplement
         self.onSupplementUpdated = onSupplementUpdated
@@ -315,7 +351,7 @@ struct EditSupplementView: View {
         self._interval = State(initialValue: supplement.interval)
         self._weeklySchedule = State(initialValue: supplement.weeklySchedule)
     }
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -331,7 +367,7 @@ struct EditSupplementView: View {
                 }
                 
                 Section("Reminder Schedule") {
-                    IntervalSelectionView(interval: $interval, weeklySchedule: $weeklySchedule)
+                    IntervalSelectionView(interval: $interval, weeklySchedule: $weeklySchedule, colorScheme: colorScheme)
                 }
                 
                 if let errorMessage = errorMessage {
@@ -417,6 +453,7 @@ struct EditSupplementView: View {
 }
 
 struct SupplementsView: View {
+    @Environment(\.colorScheme) var colorScheme
     @StateObject private var supabaseManager = SupabaseManager.shared
     @State private var supplements: [Supplement] = []
     @State private var showingAddSupplement = false
@@ -424,44 +461,71 @@ struct SupplementsView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     
+    // Dynamic colors based on color scheme
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color.black : Color(red: 243/255, green: 243/255, blue: 248/255)
+    }
+    
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? Color.white : Color(red: 51/255, green: 51/255, blue: 51/255)
+    }
+    
+    private var secondaryTextColor: Color {
+        colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
+    }
+
     var body: some View {
         NavigationStack {
-            Group {
-                if isLoading {
-                    ProgressView("Loading supplements...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if supplements.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "pills")
-                            .font(.system(size: 50))
-                            .foregroundColor(.gray)
-                        Text("Add your first supplement")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List {
-                        ForEach(supplements) { supplement in
-                            SupplementRowView(supplement: supplement)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button("Delete") {
-                                        Task {
-                                            await deleteSupplement(supplement)
-                                        }
-                                    }
-                                    .tint(.red)
-                                    
-                                    Button("Edit") {
-                                        editingSupplement = supplement
-                                    }
-                                    .tint(.blue)
-                                }
+            ZStack {
+                // Background color matching theme
+                backgroundColor
+                    .ignoresSafeArea()
+                
+                Group {
+                    if isLoading {
+                        ProgressView("Loading supplements...")
+                            .foregroundColor(primaryTextColor)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if supplements.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "pills")
+                                .font(.system(size: 50))
+                                .foregroundColor(secondaryTextColor)
+                            Text("Add your first supplement")
+                                .font(.title2)
+                                .foregroundColor(secondaryTextColor)
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        List {
+                            ForEach(supplements) { supplement in
+                                SupplementRowView(supplement: supplement, colorScheme: colorScheme)
+                                    .listRowBackground(
+                                        colorScheme == .dark ? Color(.systemGray6) : Color.white
+                                    )
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button("Delete") {
+                                            Task {
+                                                await deleteSupplement(supplement)
+                                            }
+                                        }
+                                        .tint(.red)
+                                        
+                                        Button("Edit") {
+                                            editingSupplement = supplement
+                                        }
+                                        .tint(.blue)
+                                    }
+                            }
+                        }
+                        .scrollContentBackground(.hidden)
+                        .background(backgroundColor)
                     }
                 }
             }
             .navigationTitle("My Supplements")
+            .navigationBarTitleDisplayMode(.large)
+            .preferredColorScheme(nil) // Allow system to control color scheme
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
@@ -538,7 +602,21 @@ struct SupplementsView: View {
 // Individual supplement row view
 struct SupplementRowView: View {
     let supplement: Supplement
+    let colorScheme: ColorScheme
     
+    // Dynamic colors based on color scheme
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? Color.white : Color(red: 51/255, green: 51/255, blue: 51/255)
+    }
+    
+    private var secondaryTextColor: Color {
+        colorScheme == .dark ? Color.gray : Color(red: 153/255, green: 153/255, blue: 153/255)
+    }
+    
+    private var backgroundAccentColor: Color {
+        colorScheme == .dark ? Color(.systemGray5) : Color.gray.opacity(0.2)
+    }
+
     private var timeFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
@@ -567,20 +645,20 @@ struct SupplementRowView: View {
             return "calendar.badge.clock"
         }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(supplement.name)
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(primaryTextColor)
                 Spacer()
                 Text(supplement.brand)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(secondaryTextColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(Color.gray.opacity(0.2))
+                    .background(backgroundAccentColor)
                     .cornerRadius(4)
             }
             
@@ -590,7 +668,7 @@ struct SupplementRowView: View {
                     Text(supplement.quantity)
                 }
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(secondaryTextColor)
                 
                 Spacer()
                 
@@ -599,7 +677,7 @@ struct SupplementRowView: View {
                     Text(scheduleText)
                 }
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(secondaryTextColor)
             }
             
             HStack {
@@ -608,11 +686,11 @@ struct SupplementRowView: View {
                     Text(timeFormatter.string(from: supplement.time))
                 }
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(secondaryTextColor)
                 
                 Spacer()
                 
-                // Show interval type badge
+                // Interval badge with theme-aware colors
                 Text(supplement.interval.displayName)
                     .font(.caption2)
                     .fontWeight(.medium)
