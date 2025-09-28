@@ -1,5 +1,6 @@
 import Foundation
 import Supabase
+import UserNotifications
 
 // MARK: - Data Models
 
@@ -126,6 +127,9 @@ class SupabaseManager: ObservableObject {
             .from("supplements")
             .insert(dbSupplement)
             .execute()
+        
+        // Schedule notifications for the new supplement
+        scheduleNotifications(for: supplement)
     }
     
     /// Update an existing supplement in the database
@@ -160,10 +164,16 @@ class SupabaseManager: ObservableObject {
             .update(dbSupplement)
             .eq("id", value: supplement.id)
             .execute()
+        
+        // Reschedule notifications for the updated supplement
+        scheduleNotifications(for: supplement)
     }
     
     /// Delete a supplement from the database
     func deleteSupplement(id: UUID) async throws {
+        // Cancel notifications for the supplement before deleting
+        cancelNotifications(for: id)
+        
         try await client
             .from("supplements")
             .delete()
@@ -358,6 +368,200 @@ class SupabaseManager: ObservableObject {
             .delete()
             .eq("id", value: id)
             .execute()
+    }
+    
+    // MARK: - Notification Functions
+    
+    /// Schedule notifications for a supplement
+    func scheduleNotifications(for supplement: Supplement) {
+        // Cancel existing notifications for this supplement
+        cancelNotifications(for: supplement.id)
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Time to take your supplement!"
+        content.body = "Hey! Time to take your \(supplement.quantity) of \(supplement.name)"
+        content.sound = .default
+        
+        print("📱 Scheduling notifications for: \(supplement.name) at \(supplement.time)")
+        
+        switch supplement.interval {
+        case .daily:
+            scheduleDailyNotification(supplement: supplement, content: content)
+        case .weekly:
+            scheduleWeeklyNotifications(supplement: supplement, content: content)
+        }
+    }
+    
+    /// Schedule daily notifications
+    private func scheduleDailyNotification(supplement: Supplement, content: UNMutableNotificationContent) {
+        let calendar = Calendar.current
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: supplement.time)
+        
+        print("⏰ Scheduling daily notification at \(timeComponents.hour ?? 0):\(timeComponents.minute ?? 0)")
+        
+        // Calculate time intervals for multiple doses per day
+        let hoursInterval = supplement.timesPerDay > 1 ? 24 / supplement.timesPerDay : 24
+        
+        for i in 0..<supplement.timesPerDay {
+            var adjustedComponents = timeComponents
+            if i > 0 {
+                // Add hours for subsequent doses
+                let additionalHours = i * hoursInterval
+                if let hour = timeComponents.hour {
+                    adjustedComponents.hour = (hour + additionalHours) % 24
+                }
+            }
+            
+            let trigger = UNCalendarNotificationTrigger(dateMatching: adjustedComponents, repeats: true)
+            let identifier = "\(supplement.id.uuidString)_daily_\(i)"
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+            
+            print("📅 Adding daily notification with ID: \(identifier)")
+            
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("❌ Error scheduling notification: \(error.localizedDescription)")
+                } else {
+                    print("✅ Successfully scheduled notification: \(identifier)")
+                }
+            }
+        }
+    }
+    
+    /// Schedule weekly notifications
+    private func scheduleWeeklyNotifications(supplement: Supplement, content: UNMutableNotificationContent) {
+        let calendar = Calendar.current
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: supplement.time)
+        
+        print("📅 Scheduling weekly notifications at \(timeComponents.hour ?? 0):\(timeComponents.minute ?? 0)")
+        
+        let weekdays = [
+            (supplement.weeklySchedule.sunday, 1),
+            (supplement.weeklySchedule.monday, 2),
+            (supplement.weeklySchedule.tuesday, 3),
+            (supplement.weeklySchedule.wednesday, 4),
+            (supplement.weeklySchedule.thursday, 5),
+            (supplement.weeklySchedule.friday, 6),
+            (supplement.weeklySchedule.saturday, 7)
+        ]
+        
+        // Calculate time intervals for multiple doses per day
+        let hoursInterval = supplement.timesPerDay > 1 ? 24 / supplement.timesPerDay : 24
+        
+        for (isSelected, weekday) in weekdays {
+            if isSelected {
+                print("📆 Scheduling for weekday: \(weekday)")
+                for i in 0..<supplement.timesPerDay {
+                    var dateComponents = timeComponents
+                    dateComponents.weekday = weekday
+                    
+                    if i > 0 {
+                        // Add hours for subsequent doses
+                        let additionalHours = i * hoursInterval
+                        if let hour = timeComponents.hour {
+                            dateComponents.hour = (hour + additionalHours) % 24
+                        }
+                    }
+                    
+                    let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+                    let identifier = "\(supplement.id.uuidString)_weekly_\(weekday)_\(i)"
+                    let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                    
+                    print("📅 Adding weekly notification with ID: \(identifier)")
+                    
+                    UNUserNotificationCenter.current().add(request) { error in
+                        if let error = error {
+                            print("❌ Error scheduling notification: \(error.localizedDescription)")
+                        } else {
+                            print("✅ Successfully scheduled notification: \(identifier)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Cancel notifications for a specific supplement
+    func cancelNotifications(for supplementId: UUID) {
+        print("🗑️ Cancelling notifications for supplement: \(supplementId)")
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+            let identifiersToRemove = requests.compactMap { request in
+                request.identifier.hasPrefix(supplementId.uuidString) ? request.identifier : nil
+            }
+            print("🗑️ Removing \(identifiersToRemove.count) notifications")
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiersToRemove)
+        }
+    }
+    
+    /// Test function to schedule an immediate notification for debugging
+    func scheduleTestNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "Test Notification"
+        content.body = "Test notification - your notification system is working!"
+        content.sound = .default
+        
+        // Schedule for 5 seconds from now
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        let request = UNNotificationRequest(identifier: "test_notification_\(Date().timeIntervalSince1970)", content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("❌ Error scheduling test notification: \(error.localizedDescription)")
+            } else {
+                print("✅ Test notification scheduled for 5 seconds from now")
+            }
+        }
+    }
+    
+    func checkNotificationSettings() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                print("🔔 Notification Settings:")
+                print("   Authorization Status: \(settings.authorizationStatus.rawValue)")
+                print("   Alert Setting: \(settings.alertSetting.rawValue)")
+                print("   Badge Setting: \(settings.badgeSetting.rawValue)")
+                print("   Sound Setting: \(settings.soundSetting.rawValue)")
+                print("   Notification Center Setting: \(settings.notificationCenterSetting.rawValue)")
+                print("   Lock Screen Setting: \(settings.lockScreenSetting.rawValue)")
+                print("   Car Play Setting: \(settings.carPlaySetting.rawValue)")
+                print("   Critical Alert Setting: \(settings.criticalAlertSetting.rawValue)")
+                print("   Announcement Setting: \(settings.announcementSetting.rawValue)")
+                
+                switch settings.authorizationStatus {
+                case .authorized:
+                    print("✅ Notifications are authorized")
+                case .denied:
+                    print("❌ Notifications are denied")
+                case .notDetermined:
+                    print("⚠️ Notification permission not determined")
+                case .provisional:
+                    print("⚠️ Provisional authorization")
+                case .ephemeral:
+                    print("⚠️ Ephemeral authorization")
+                @unknown default:
+                    print("❓ Unknown authorization status")
+                }
+            }
+        }
+    }
+    
+    func checkPendingNotifications() {
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+            DispatchQueue.main.async {
+                print("📋 Pending Notifications: \(requests.count)")
+                for request in requests {
+                    print("   ID: \(request.identifier)")
+                    print("   Title: \(request.content.title)")
+                    print("   Body: \(request.content.body)")
+                    if let trigger = request.trigger as? UNTimeIntervalNotificationTrigger {
+                        print("   Time Interval: \(trigger.timeInterval) seconds")
+                    } else if let trigger = request.trigger as? UNCalendarNotificationTrigger {
+                        print("   Calendar Trigger: \(trigger.dateComponents)")
+                    }
+                    print("   ---")
+                }
+            }
+        }
     }
 }
 

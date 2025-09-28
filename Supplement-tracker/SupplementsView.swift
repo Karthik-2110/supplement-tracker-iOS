@@ -527,6 +527,26 @@ struct SupplementsView: View {
             .navigationBarTitleDisplayMode(.large)
             .preferredColorScheme(nil) // Allow system to control color scheme
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Menu {
+                        Button("Test Notification") {
+                            Task {
+                                await SupabaseManager.shared.scheduleTestNotification()
+                            }
+                        }
+                        
+                        Button("Check Settings") {
+                            SupabaseManager.shared.checkNotificationSettings()
+                        }
+                        
+                        Button("Check Pending") {
+                            SupabaseManager.shared.checkPendingNotifications()
+                        }
+                    } label: {
+                        Image(systemName: "bell.badge")
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showingAddSupplement = true
