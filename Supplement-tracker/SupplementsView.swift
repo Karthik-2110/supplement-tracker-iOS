@@ -594,7 +594,21 @@ struct SupplementsView: View {
         do {
             let fetchedSupplements = try await supabaseManager.fetchSupplements()
             await MainActor.run {
-                supplements = fetchedSupplements
+                // Sort supplements by time
+                supplements = fetchedSupplements.sorted { supplement1, supplement2 in
+                    let calendar = Calendar.current
+                    let time1 = calendar.dateComponents([.hour, .minute], from: supplement1.time)
+                    let time2 = calendar.dateComponents([.hour, .minute], from: supplement2.time)
+                    
+                    if let hour1 = time1.hour, let minute1 = time1.minute,
+                       let hour2 = time2.hour, let minute2 = time2.minute {
+                        if hour1 != hour2 {
+                            return hour1 < hour2
+                        }
+                        return minute1 < minute2
+                    }
+                    return false
+                }
                 isLoading = false
             }
         } catch {

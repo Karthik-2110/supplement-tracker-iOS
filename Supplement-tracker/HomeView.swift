@@ -73,9 +73,13 @@ struct SupplementConsumptionRowView: View {
                     .strikethrough(item.isConsumed)
                 Spacer()
                 HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.caption)
-                        .foregroundColor(secondaryTextColor)
+                    // AM/PM icon before the text
+                    let timeComponents = item.timeToTake.split(separator: ":")
+                    if let hour = Int(timeComponents.first ?? "0") {
+                        Image(systemName: hour < 12 ? "sun.max.fill" : "moon.fill")
+                            .font(.caption)
+                            .foregroundColor(hour < 12 ? .orange : .purple)
+                    }
                     Text(formatTime(item.timeToTake))
                         .font(.caption)
                         .foregroundColor(secondaryTextColor)
